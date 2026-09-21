@@ -45,16 +45,20 @@ def command(name, body):
     global AGENT
     if name == "reset":
         scenario = body.get("scenario", "flights")
-        if scenario not in {"travel", "research", "flights"}:
+        urls = {
+            "flights": "https://www.google.com/travel/flights?hl=en",
+            "12306": "https://www.12306.cn/index/",
+            "travel": f"{ORIGIN}/fixture.html?scenario=travel",
+            "research": f"{ORIGIN}/fixture.html?scenario=research",
+        }
+        if scenario not in urls:
             raise ValueError("Unknown demo scenario")
         goal = body.get("goal", "").strip()
         if not goal or len(goal) > 2000:
             raise ValueError("Enter 1–2,000 characters")
         close_browser()
         AGENT = Agent(
-            "https://www.google.com/travel/flights?hl=en"
-            if scenario == "flights"
-            else f"{ORIGIN}/fixture.html?scenario={scenario}",
+            urls[scenario],
             goal,
             screenshots=True,
             record_dir=Path.cwd() / "artifacts" / "frames" if body.get("record") else None,

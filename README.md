@@ -63,6 +63,8 @@ uv run jev
 
 Open **http://127.0.0.1:8766** and click **Start demo → Run automatically**. The inspector shows numbered elements, operation probabilities, target probabilities, and executed actions. **Choose next** pauses before execution.
 
+Choose **铁路 12306 · real web** to start at [the 12306 homepage](https://www.12306.cn/index/). Edit the task with your route, travel date, and requirements, then click **Start demo → Run automatically**. This uses the same general agent loop as Google Flights; the editable example goal is not a site-specific action script. The 12306 scenario has not been verified end to end; inspect the actual page to confirm the requested outcome.
+
 Chrome connects through [Browser Harness](https://github.com/browser-use/browser-harness), installed by `uv sync`. Run `uv run browser-harness --doctor` if it needs connecting. Allow remote debugging in Chrome when prompted.
 
 `TEXT_MODEL_API_KEY` is an OpenRouter key in the example configuration. The current demo uses `inception/mercury-2.5` with reasoning disabled. Gemini, GLM, and DeepSeek can also use the OpenAI-compatible text helper; configure the appropriate model, endpoint, and reasoning setting.

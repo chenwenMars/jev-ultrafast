@@ -4,6 +4,7 @@ let state = null,
   busy = false,
   automatic = false;
 const goals = {
+  '12306': '查询明天从北京南到上海虹桥的高铁车次。显示符合条件的车次列表后停止，不要预订或支付。',
   flights: 'Find one-way flights from Zurich to London on September 20, 2026, for one adult in economy. Stop when matching flight options are visible. Do not select or book a flight.',
   travel: 'Find a Design stay in Lisbon with Free cancellation and open Casa Flora.',
   research:
