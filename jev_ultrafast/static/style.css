@@ -49,6 +49,41 @@ a {
   gap: 8px;
   align-items: center;
 }
+.header-tools {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.language-switch {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f5f5f1;
+}
+.language-option {
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #77796f;
+  font:
+    10px ui-monospace,
+    monospace;
+}
+.language-option:hover {
+  background: #e9ebe4;
+}
+.language-option[aria-pressed="true"] {
+  background: var(--green);
+  color: white;
+}
+.language-option[aria-pressed="true"]:hover {
+  background: #105b37;
+}
 .dot {
   width: 7px;
   height: 7px;
