@@ -12,11 +12,15 @@ TYPE_TEXT sends the goal, selected field, visible page context, and recent actio
 
 One browser-side DOM snapshot supplies common HTML/ARIA roles, names, values, visible text, and executable targets. A WeakMap gives each actual node a code-owned identity; a Map keeps the live references used for execution. Replaced elements receive new identities, disconnected references are pruned, and navigation starts a new cache. These IDs are not CDP backend node IDs. Geometry is always read again immediately before input.
 
+Named custom controls whose pointer cursor is not inherited from a parent are also offered. This includes legacy station suggestions and calendar days without ARIA roles; unnamed custom icons are excluded. Snapshot hit-testing hides controls covered by a popup, so the policy cannot repeatedly choose a field that the executor must reject.
+
 The model sees visible text. Background focus emulation keeps animation frames running in the owned tab. Screenshots are optional and disabled in library calls by default; `screenshots=True` or `record_dir=...` enables them. The inspector enables them explicitly. A continuous screencast can record a run separately.
 
 Freshness compares semantic state instead of counting DOM mutations. Before a click/select, guards compare the document, full URL, viewport, safe form values/states, selected target, and nearby form/dialog/row context. Text generation, typing, scrolling, waiting, and completion use a full semantic comparison. The executor rechecks target visibility, enabled state, geometry, and click occlusion. Scoped guards intentionally permit unrelated visible content to change; this is a practical heuristic, not proof that arbitrary page changes are irrelevant to the goal.
 
 Browser mutations are not retried by transport recovery. Completed execution is logged before the next observation, including when that observation encounters a navigation. An interrupted native-select evaluation stops because its change event may already have fired. Typing uses a browser select-all command followed by CDP text insertion, so existing input contents are replaced.
+
+Text insertion emits a key-up event for legacy autocomplete widgets that do not react to input events. Both decision and text-helper context include the host's local current date for relative-date goals. A single newly opened child of an owned tab is followed before observation or freshness validation, invalidating parent-page decisions. Multiple new children are ambiguous and stop execution; unrelated user tabs are never adopted or closed.
 
 The next observation waits for up to two animation frames or 50 ms after an interaction. Editable ARIA comboboxes instead wait for visible options, capped at 200 ms. This avoids paying for a prediction before autocomplete suggestions arrive. An explicit WAIT remains 100 ms; network loading is never fast-forwarded in the recording.
 
@@ -30,4 +34,6 @@ The audit also found that treating every INPUT as editable misclassified checkbo
 
 Sixty browser actions and 120 decision requests bound a run. Up to 250 action candidates are retained; truncated candidates cannot be selected. The service stays loopback-only, serializes inspector actions, and checks Host, Origin, and a local request token. Credentials remain server-side. Tabs share the existing Chrome profile.
 
-The policy is generic, but two websites do not establish broad reliability. Name resolution covers common labels, ARIA references, and text; it is not the browser's full accessibility algorithm. Shadow roots, frames, canvas, uploads, nested scrolling, pop-ups, and complex keyboard interactions can block progress. A valid action can still be wrong. Independent checks, rather than the model's DONE choice, determine whether the demonstrated task succeeded.
+Automatic stepping also stops after three consecutive stale-step rejections with the same error and refreshed page fingerprint. A changing loading page does not consume this identical-state allowance, and successful execution resets it. This bounds silent rejection loops without retrying mutations.
+
+The policy is generic, but two websites do not establish broad reliability. Name resolution covers common labels, ARIA references, and text; it is not the browser's full accessibility algorithm. Shadow roots, frames, canvas, uploads, nested scrolling, ambiguous multi-tab flows, and complex keyboard interactions can block progress. A valid action can still be wrong. Independent checks, rather than the model's DONE choice, determine whether the demonstrated task succeeded.

@@ -115,6 +115,7 @@ def test_click_cannot_consume_a_text_target(monkeypatch):
 
 def test_target_head_receives_control_state_and_full_next_step_rules(monkeypatch):
     p = page()
+    p["current_date"] = "2026-09-22"
     p["actions"].insert(0, {
         "id": "toggle", "kind": "click", "label": "Free cancellation", "node": 30,
         "role": "checkbox", "checked": "true", "selected": False,
@@ -122,6 +123,7 @@ def test_target_head_receives_control_state_and_full_next_step_rules(monkeypatch
 
     def post(_url, _key, body):
         questions = body["questions"]
+        assert body["state"]["current_date"] == "2026-09-22"
         target = questions["click_target"]
         assert target["criteria"]["1"]["checked"] == "true"
         assert target["criteria"]["1"]["selected"] is False
@@ -138,6 +140,16 @@ def test_target_head_receives_control_state_and_full_next_step_rules(monkeypatch
     monkeypatch.setattr(model, "post_json", post)
     d = model.choose(p, "Search with free cancellation", [])
     assert d["choice"] == "e3"
+
+
+def test_text_context_changes_when_relative_date_changes():
+    p = page()
+    p["current_date"] = "2026-09-22"
+    first = model.field_context("Depart tomorrow", p["actions"][0], p, [])
+    p["current_date"] = "2026-09-23"
+    second = model.field_context("Depart tomorrow", p["actions"][0], p, [])
+    assert first != second
+    assert second["current_date"] == "2026-09-23"
 
 
 def test_quoted_task_text_still_uses_the_llm(monkeypatch):
@@ -251,6 +263,26 @@ def test_executor_rejects_a_stale_page_before_browser_input(monkeypatch):
     operation.assert_not_called()
 
 
+def test_text_input_notifies_legacy_keyup_autocomplete(monkeypatch):
+    import jev_ultrafast.browser as browser
+
+    def response(method, **_params):
+        return {"result": {"value": {"x": 50, "y": 20}}} if method == "Runtime.evaluate" else {}
+
+    cdp = Mock(side_effect=response)
+    monkeypatch.setattr(browser, "cdp", cdp)
+    browser_operation({
+        "operation": "act",
+        "session": "test",
+        "action": page()["actions"][0],
+        "text": "Beijing South",
+    })
+    assert cdp.call_args_list[-1].args[0] == "Input.dispatchKeyEvent"
+    assert cdp.call_args_list[-1].kwargs == {
+        "session_id": "test", "type": "keyUp", "key": "Unidentified",
+    }
+
+
 @pytest.mark.parametrize("response", [{"exceptionDetails": {}}, {"result": {}}])
 def test_interrupted_dropdown_mutation_cannot_be_retried_as_stale(monkeypatch, response):
     import jev_ultrafast.browser as browser
@@ -318,3 +350,87 @@ def test_navigation_during_prediction_reobserves_without_action(runner):
     assert runner.state["status"] == "ready"
     assert runner.state["decision"] is None
     runner.state["browser"].act.assert_not_called()
+
+
+def test_repeated_stale_steps_stop_before_exhausting_model_budget(runner, monkeypatch):
+    monkeypatch.setattr(loop, "choose", Mock(return_value=decision("e3")))
+    runner.state["browser"].act.side_effect = StalePage("Target changed or is covered. Observe again.")
+    for _ in range(2):
+        assert runner.command("tick")["status"] == "ready"
+    with pytest.raises(ValueError, match="3 consecutive stale steps.*covered"):
+        runner.command("tick")
+    assert runner.state["status"] == "blocked"
+    assert runner.state["history"] == []
+    assert len(runner.state["decisions"]) == 3
+    with pytest.raises(ValueError, match="run has stopped"):
+        runner.command("tick")
+    assert runner.state["browser"].act.call_count == 3
+
+
+def test_successful_execution_resets_stale_step_count(runner, monkeypatch):
+    monkeypatch.setattr(loop, "choose", Mock(return_value=decision("e3")))
+    runner.state["browser"].act.side_effect = [StalePage("changed"), None, StalePage("changed")]
+    runner.command("tick")
+    runner.command("tick")
+    runner.command("tick")
+    assert runner.state["status"] == "ready"
+    assert runner.state["stale_attempts"] == 1
+    assert len(runner.state["history"]) == 1
+
+
+def test_changing_page_during_loading_does_not_trigger_stale_loop_stop(runner, monkeypatch):
+    monkeypatch.setattr(loop, "choose", Mock(return_value=decision("e3")))
+    runner.state["browser"].act.side_effect = StalePage("changed")
+    for i in range(5):
+        updated = page()
+        updated["text"] = f"Loading {i}"
+        updated["fingerprint"] = fingerprint(updated)
+        runner.state["browser"].observe.return_value = updated
+        runner.command("tick")
+    assert runner.state["status"] == "ready"
+    assert runner.state["stale_attempts"] == 1
+
+
+def test_result_popup_invalidates_parent_decision_and_preserves_user_tabs(monkeypatch):
+    import jev_ultrafast.browser as browser
+
+    b = browser.Browser.__new__(browser.Browser)
+    b.target, b.session, b.owned_targets = "parent", "parent-session", ["parent"]
+    targets = [
+        {"targetId": "user", "type": "page"},
+        {"targetId": "other-child", "type": "page", "openerId": "user"},
+        {"targetId": "result", "type": "page", "openerId": "parent"},
+    ]
+
+    def response(method, **_params):
+        if method == "Target.getTargets":
+            return {"targetInfos": targets}
+        if method == "Target.attachToTarget":
+            return {"sessionId": "result-session"}
+        return {}
+
+    cdp = Mock(side_effect=response)
+    monkeypatch.setattr(browser, "cdp", cdp)
+    assert not b.fresh(page(), page()["actions"][0])
+    assert b.target == "result" and b.session == "result-session"
+    assert b.owned_targets == ["parent", "result"]
+    assert not b.follow_popup()
+    b.close()
+    assert [c.kwargs["targetId"] for c in cdp.call_args_list if c.args[0] == "Target.closeTarget"] == [
+        "result", "parent",
+    ]
+
+
+def test_ambiguous_popups_do_not_select_an_arbitrary_tab(monkeypatch):
+    import jev_ultrafast.browser as browser
+
+    b = browser.Browser.__new__(browser.Browser)
+    b.target, b.owned_targets = "parent", ["parent"]
+    cdp = Mock(return_value={"targetInfos": [
+        {"targetId": name, "type": "page", "openerId": "parent"} for name in ("one", "two")
+    ]})
+    monkeypatch.setattr(browser, "cdp", cdp)
+    with pytest.raises(RuntimeError, match="Multiple child tabs"):
+        b.follow_popup()
+    assert b.target == "parent"
+    assert cdp.call_count == 1

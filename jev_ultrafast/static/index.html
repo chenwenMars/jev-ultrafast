@@ -41,7 +41,22 @@
             <option value="12306" data-i18n="scenario.12306">铁路 12306 · real web</option>
             <option value="travel" data-i18n="scenario.travel">Travel planner · fixture</option>
             <option value="research" data-i18n="scenario.research">Reading room · fixture</option>
+            <option value="custom" data-i18n="scenario.custom">Custom website · real web</option>
           </select>
+        </div>
+        <div class="custom-url-field" id="custom-url-field" hidden>
+          <label for="custom-url" data-i18n="task.website">Website address</label>
+          <input
+            id="custom-url"
+            name="custom_url"
+            type="text"
+            inputmode="url"
+            autocomplete="url"
+            maxlength="2048"
+            spellcheck="false"
+            placeholder="https://example.com"
+            data-i18n-placeholder="task.websitePlaceholder"
+          />
         </div>
         <div class="task-row">
           <textarea id="goal" name="goal" rows="5"></textarea

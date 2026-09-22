@@ -56,11 +56,19 @@ class Agent:
             try:
                 self.command("predict", {})
                 return self.command("act", {"fingerprint": state["page"]["fingerprint"]})
-            except StalePage:
+            except StalePage as error:
                 state["decision"] = None
                 state["status"] = "ready"
                 state["page"] = state["browser"].observe(screenshot=self.screenshots)
                 state["elapsed_ms"] = round((time.perf_counter() - state["started_at"]) * 1000)
+                stale_key = (str(error), state["page"]["fingerprint"])
+                state["stale_attempts"] = (
+                    state.get("stale_attempts", 0) + 1 if state.get("stale_key") == stale_key else 1
+                )
+                state["stale_key"] = stale_key
+                if state["stale_attempts"] >= 3:
+                    state["status"] = "blocked"
+                    raise ValueError(f"Stopped after 3 consecutive stale steps on the same page: {error}") from error
                 return self.snapshot()
         elif name == "predict":
             if not state["browser"]:
@@ -115,6 +123,7 @@ class Agent:
                     state["text_calls"].append({**helper, "field": action["label"], "value": text})
             # Browser.act checks freshness immediately before input, including after text generation.
             state["browser"].act(action, page, text=text)
+            state["stale_attempts"] = 0
             self.pending_text = None
             state["elapsed_ms"] = round((time.perf_counter() - state["started_at"]) * 1000)
             # Record execution before observing. A stale post-action observation must not erase the action.

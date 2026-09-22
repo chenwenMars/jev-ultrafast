@@ -65,6 +65,10 @@ Open **http://127.0.0.1:8766** and click **Start demo → Run automatically**. T
 
 Choose **铁路 12306 · real web** to start at [the 12306 homepage](https://www.12306.cn/index/). Edit the task with your route, travel date, and requirements, then click **Start demo → Run automatically**. This uses the same general agent loop as Google Flights; the editable example goal is not a site-specific action script. The 12306 scenario has not been verified end to end; inspect the actual page to confirm the requested outcome.
 
+Choose **Custom website · real web** to enter any HTTP(S) website and a natural-language goal. A missing scheme is treated as `https://`; the custom scenario still uses the same observed-element action space and does not add site-specific plans, selectors, or prepared field values.
+
+Live debugging on September 22, 2026 verified autonomous station-suggestion clicks and following a query into its result tab. It also reproduced premature `DONE` with station/type filters unset and repeated route swapping in another run. The control fixes do not establish reliable completion of this scenario.
+
 Chrome connects through [Browser Harness](https://github.com/browser-use/browser-harness), installed by `uv sync`. Run `uv run browser-harness --doctor` if it needs connecting. Allow remote debugging in Chrome when prompted.
 
 `TEXT_MODEL_API_KEY` is an OpenRouter key in the example configuration. The current demo uses `inception/mercury-2.5` with reasoning disabled. Gemini, GLM, and DeepSeek can also use the OpenAI-compatible text helper; configure the appropriate model, endpoint, and reasoning setting.
@@ -99,6 +103,8 @@ uv run --env-file .env python examples/run.py \
 - **No screenshots in the default agent loop.** Jev consumes structured state. The inspector opts into screenshots; the video uses a separate continuous screencast.
 - **One browser call per snapshot.** Read visible controls, their names, values, and text atomically. Keep references to the actual DOM nodes.
 - **Validate the selected target.** Clicks check the document, form values, target, and nearby context. Animation alone does not force another prediction. Resolve current geometry and reject covered controls before input.
+- **Expose usable custom controls.** Named pointer-cursor controls, including legacy autocomplete suggestions and calendar days, join HTML/ARIA controls. Covered targets and unnamed custom icons are excluded.
+- **Follow a query's result tab.** A single new child of an owned tab becomes the active page. Unrelated user tabs are untouched; multiple new children stop the run rather than guessing.
 - **Wait for useful state.** After typing into a combobox, wait for visible suggestions, capped at 200 ms. Other interactions get at most two animation frames or 50 ms. These reads happen after execution is logged.
 - **Keep hidden tabs rendering.** Focus emulation prevents background animation throttling without switching Chrome's visible tab.
 - **Send visible text.** Offscreen article bodies and footers do not fill the model context.
@@ -125,7 +131,7 @@ In six alternating runs with identical models and settings, both versions passed
 
 The same policy opened the requested Wikipedia article in **2.798 s** and passed a local hotel search/filter task in **1.896 s**. Runs, failures, source hashes, and measurement boundaries are in [performance.md](docs/performance.md).
 
-A `DONE` choice still requires independent outcome verification. The DOM reader handles common HTML and ARIA controls, not the full accessible-name specification. Shadow roots, frames, canvas, uploads, pop-up tabs, nested scrolling, and arbitrary keyboard widgets remain outside this MVP. Owned tabs share the existing Chrome profile.
+A `DONE` choice still requires independent outcome verification. The DOM reader handles common HTML and ARIA controls plus named pointer-cursor controls, not the full accessible-name specification. Shadow roots, frames, canvas, uploads, ambiguous multi-tab flows, nested scrolling, and arbitrary keyboard widgets remain outside this MVP. Owned tabs share the existing Chrome profile.
 
 ## Development
 

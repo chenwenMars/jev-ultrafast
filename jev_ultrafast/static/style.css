@@ -167,6 +167,22 @@ form {
   align-items: center;
   gap: 16px;
 }
+.custom-url-field {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  padding: 0 0 10px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.custom-url-field[hidden] {
+  display: none;
+}
+.custom-url-field label {
+  font-size: 12px;
+  color: #77776e;
+}
 input,
 select,
 button {
@@ -653,6 +669,10 @@ footer {
   .task-row {
     flex-direction: column;
     align-items: stretch;
+  }
+  .custom-url-field {
+    grid-template-columns: 1fr;
+    gap: 2px;
   }
   #goal {
     font-size: 16px;

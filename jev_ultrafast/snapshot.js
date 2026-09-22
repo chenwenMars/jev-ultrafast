@@ -23,8 +23,6 @@
   };
   const roles=['button','link','checkbox','radio','switch','tab','menuitem','menuitemradio',
     'option','gridcell','combobox','textbox','searchbox','spinbutton'];
-  const selector='a[href],button,input,textarea,select,summary,[contenteditable="true"],'+
-    roles.map(role=>'[role="'+role+'"]').join(',');
   const role = e => {
     const explicit=e.getAttribute('role');
     if (roles.includes(explicit)) return explicit;
@@ -39,6 +37,8 @@
       if (e.type==='number') return 'spinbutton';
       if (['text','email','url','tel'].includes(e.type)) return 'textbox';
     }
+    if (getComputedStyle(e).cursor==='pointer' &&
+        (!e.parentElement || getComputedStyle(e.parentElement).cursor!=='pointer')) return 'clickable';
     return null;
   };
   cache.pageKey=()=>[performance.timeOrigin,location.href,scrollX,scrollY,innerWidth,innerHeight,
@@ -53,12 +53,18 @@
       e.getAttribute('href'),scope?.innerText?.slice(0,6000)||''];
   };
   const actions=[];
-  for (const e of document.querySelectorAll(selector)) {
+  for (const e of document.querySelectorAll('body *')) {
     if (!safe(e) || !visible(e) || e.matches(':disabled') || e.closest('[aria-disabled="true"]')) continue;
-    const r=e.getBoundingClientRect(), x=r.x+r.width/2, y=r.y+r.height/2, rname=role(e);
-    if (!rname || r.width<=0 || r.height<=0 || x<0 || y<0 || x>=innerWidth || y>=innerHeight) continue;
+    const r=e.getBoundingClientRect(), x=r.x+r.width/2, y=r.y+r.height/2;
+    if (r.width<=0 || r.height<=0 || x<0 || y<0 || x>=innerWidth || y>=innerHeight) continue;
+    const rname=role(e);
+    if (!rname) continue;
+    const label=name(e);
+    if (rname==='clickable' && !label) continue;
+    // Offer only targets the executor can hit; a popup may cover the next field.
+    if (!e.contains(document.elementFromPoint(x,y))) continue;
     if (rname==='gridcell' && e.querySelector('button,[role="button"]')) continue;
-    const base={node:identity(e),role:rname,label:name(e)||rname,
+    const base={node:identity(e),role:rname,label:label||rname,
       rect:{x:r.x,y:r.y,w:r.width,h:r.height}};
     for (const key of ['checked','selected','expanded']) {
       const value=e.getAttribute('aria-'+key);

@@ -20,6 +20,31 @@ LOCK = threading.Lock()
 AGENT = None
 
 
+def custom_start_url(value):
+    value = str(value or "").strip()
+    if (
+        not value
+        or len(value) > 2048
+        or any(character.isspace() for character in value)
+    ):
+        raise ValueError("Enter a valid website address")
+    if "://" not in value:
+        value = f"https://{value}"
+    try:
+        parsed = urlparse(value)
+    except ValueError as error:
+        raise ValueError("Enter a valid HTTP(S) website address") from error
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise ValueError("Enter a valid HTTP(S) website address")
+    if parsed.username or parsed.password:
+        raise ValueError("Website addresses cannot include credentials")
+    try:
+        parsed.port
+    except ValueError as error:
+        raise ValueError("Enter a valid HTTP(S) website address") from error
+    return value
+
+
 def load_environment():
     path = Path.cwd() / ".env"
     if path.exists():
@@ -51,14 +76,18 @@ def command(name, body):
             "travel": f"{ORIGIN}/fixture.html?scenario=travel",
             "research": f"{ORIGIN}/fixture.html?scenario=research",
         }
-        if scenario not in urls:
+        if scenario == "custom":
+            start_url = custom_start_url(body.get("custom_url"))
+        elif scenario in urls:
+            start_url = urls[scenario]
+        else:
             raise ValueError("Unknown demo scenario")
         goal = body.get("goal", "").strip()
         if not goal or len(goal) > 2000:
             raise ValueError("Enter 1–2,000 characters")
         close_browser()
         AGENT = Agent(
-            urls[scenario],
+            start_url,
             goal,
             screenshots=True,
             record_dir=Path.cwd() / "artifacts" / "frames" if body.get("record") else None,

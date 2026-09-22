@@ -4,6 +4,7 @@ import hashlib
 import json
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 from browser_harness.admin import ensure_daemon
@@ -21,6 +22,7 @@ class Browser:
     def __init__(self, url):
         ensure_daemon()
         self.target = cdp("Target.createTarget", url="about:blank", background=True)["targetId"]
+        self.owned_targets = [self.target]
         self.session = cdp("Target.attachToTarget", targetId=self.target, flatten=True)["sessionId"]
         self.call("Emulation.setDeviceMetricsOverride", width=1120, height=780, deviceScaleFactor=1, mobile=False)
         # Keep rAF/menus rendering in an owned background tab, without activating the user's Chrome tab.
@@ -42,6 +44,7 @@ class Browser:
         return response.get("result", {}).get("value")
 
     def observe(self, screenshot=True):
+        self.follow_popup()
         if getattr(self, "after_input", None):
             action, self.after_input = self.after_input, None
             # This is read-only and happens after execution was logged, even if navigation interrupts it.
@@ -86,6 +89,8 @@ class Browser:
         raise StalePage("Page did not settle")
 
     def fresh(self, page, action=None):
+        if self.follow_popup():
+            return False
         if action is not None and action["kind"] in {"click", "select"}:
             node = action["node"]
             if type(node) is not int:
@@ -106,10 +111,31 @@ class Browser:
         self.after_input = action if action["kind"] != "wait" else None
         return result
 
+    def follow_popup(self):
+        """Follow a newly opened child, never an unrelated user tab."""
+        children = [
+            t for t in cdp("Target.getTargets")["targetInfos"]
+            if t["type"] == "page" and t.get("openerId") in self.owned_targets
+            and t["targetId"] not in self.owned_targets
+        ]
+        if not children:
+            return False
+        if len(children) > 1:
+            raise RuntimeError("Multiple child tabs opened; cannot choose a result tab unambiguously.")
+        target = children[0]["targetId"]
+        session = cdp("Target.attachToTarget", targetId=target, flatten=True)["sessionId"]
+        self.owned_targets.append(target)
+        self.target, self.session = target, session
+        self.after_input = None
+        self.call("Emulation.setDeviceMetricsOverride", width=1120, height=780, deviceScaleFactor=1, mobile=False)
+        self.call("Emulation.setFocusEmulationEnabled", enabled=True)
+        return True
+
     def close(self):
-        if self.target:
-            cdp("Target.closeTarget", targetId=self.target)
-            self.target = None
+        for target in reversed(self.owned_targets):
+            cdp("Target.closeTarget", targetId=target)
+        self.owned_targets.clear()
+        self.target = None
 
 
 def fingerprint(state):
@@ -183,12 +209,15 @@ def browser_operation(request):
                         modifiers=4 if sys.platform == "darwin" else 2,
                     )
                     call("Input.insertText", text=request["text"])
+                    # Legacy autocomplete widgets often filter on keyup rather than input.
+                    call("Input.dispatchKeyEvent", type="keyUp", key="Unidentified")
         return {"executed": action["id"]}
 
     info = evaluate(READ_STATE)
     if info is None:
         raise StalePage("Document is navigating")
     info["fingerprint"] = fingerprint(info)
+    info["current_date"] = datetime.now().astimezone().date().isoformat()
     if request.get("screenshot", True):
         info["screenshot"] = call("Page.captureScreenshot", format="jpeg", quality=72)["data"]
     return info

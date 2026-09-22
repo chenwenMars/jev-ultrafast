@@ -20,7 +20,7 @@ def main():
     try:
         page = browser.observe(screenshot=False)
         action = next(a for a in page["actions"] if a["label"] == "Continue")
-        browser.evaluate("document.querySelector('#target').style.transform='translateX(200px)'")
+        browser.evaluate("document.querySelector('#target').style.transform='translateY(120px)'")
         assert browser.fresh(page), "Movement should use fresh geometry, not another model call"
         browser.act(action, page)
         assert browser.evaluate("window.clicks") == 1
@@ -57,7 +57,9 @@ def main():
         browser.evaluate("const cover=document.createElement('div'); "
                          "cover.style.cssText='position:fixed;inset:0;z-index:9999;background:white'; "
                          "document.body.append(cover)")
-        assert browser.fresh(page)
+        assert browser.fresh(page, action)
+        assert not browser.fresh(page)
+        assert not any(a.get("node") == action["node"] for a in browser.observe(screenshot=False)["actions"])
         try:
             browser.act(action, page)
         except (RuntimeError, StalePage):
@@ -72,6 +74,8 @@ def main():
           <button type="button" id="buy">Buy</button>
           <label>Search <input id="query" role="combobox" aria-controls="suggestions"></label>
           <div role="listbox" id="suggestions"></div>
+          <label>Station <input id="station"></label>
+          <div id="station-options"></div>
           <label><input id="check" type="checkbox">Enabled</label>
           <label><input id="radio" type="radio">Choice</label>
           <input id="readonly" aria-label="Read only" readonly>
@@ -124,6 +128,72 @@ def main():
         assert value == "Generated", repr(value)
         assert any(a.get("role") == "option" for a in page["actions"])
         passed.append("real text input waits for asynchronous combobox suggestions")
+
+        browser.evaluate("document.querySelector('#station').addEventListener('keyup',()=>{"
+                         "document.querySelector('#station-options').innerHTML="
+                         "'<div id=station-choice style=cursor:pointer><span>Beijing South</span></div>';"
+                         "document.querySelector('#station-choice').onclick=()=>window.stationSelected=true"
+                         "})")
+        page = browser.observe(screenshot=False)
+        field = next(a for a in page["actions"] if a["kind"] == "fill" and a["label"] == "Station")
+        browser.act(field, page, text="Beijing South")
+        page = browser.observe(screenshot=False)
+        suggestion = next(a for a in page["actions"] if a["label"] == "Beijing South")
+        assert suggestion["role"] == "clickable"
+        browser.act(suggestion, page)
+        assert browser.evaluate("window.stationSelected") is True
+        passed.append("legacy keyup autocomplete exposes and clicks a custom suggestion")
+
+        browser.evaluate("document.body.innerHTML=" + repr("""
+          <label>Origin<input id="origin"></label><br>
+          <label>Destination<input id="destination"></label>
+          <div id="popup" style="display:none;position:absolute;z-index:10;background:white;cursor:pointer">
+            <span>Generated station</span>
+          </div>
+        """))
+        browser.evaluate("""document.querySelector('#origin').addEventListener('keyup',()=>{
+          const popup=document.querySelector('#popup');
+          const rect=document.querySelector('#destination').getBoundingClientRect();
+          Object.assign(popup.style,{display:'block',left:rect.x+'px',top:rect.y+'px',
+            width:rect.width+'px',height:rect.height+'px'});
+          popup.onclick=()=>{window.stationClicks=(window.stationClicks||0)+1;popup.style.display='none'};
+        })""")
+        page = browser.observe(screenshot=False)
+        origin = next(a for a in page["actions"] if a["label"] == "Origin")
+        browser.act(origin, page, text="Generated station")
+        page = browser.observe(screenshot=False)
+        assert not any("Destination" in a["label"] for a in page["actions"])
+        suggestion = next(a for a in page["actions"] if a["label"] == "Generated station")
+        browser.act(suggestion, page)
+        page = browser.observe(screenshot=False)
+        assert browser.evaluate("window.stationClicks") == 1
+        assert any(a["label"] == "Destination" and a["kind"] == "fill" for a in page["actions"])
+        passed.append("autocomplete occlusion hides the covered field until the suggestion is selected")
+        browser.evaluate("document.body.innerHTML=" + repr("""
+          <button id="open">Date</button>
+          <div style="cursor:pointer;width:20px;height:20px"></div>
+          <div id="calendar" style="display:none"><div style="cursor:pointer"><span>22</span></div></div>
+        """))
+        browser.evaluate("document.querySelector('#open').onclick=()=>document.querySelector('#calendar').style.display='block'")
+        page = browser.observe(screenshot=False)
+        browser.act(next(a for a in page["actions"] if a["label"] == "Date"), page)
+        page = browser.observe(screenshot=False)
+        days = [a for a in page["actions"] if a["label"] == "22"]
+        assert len(days) == 1 and days[0]["kind"] == "click"
+        assert not any(a["label"] == "clickable" for a in page["actions"])
+        passed.append("click-opened calendar exposes custom days without inherited-cursor duplicates")
+        browser.evaluate("document.body.innerHTML='<button id=result>Open results</button>';"
+                         "document.querySelector('#result').onclick=()=>{const child=window.open('about:blank');"
+                         "child.document.title='Search results';"
+                         "child.document.body.innerHTML='<p>Matching results</p>'}")
+        page = browser.observe(screenshot=False)
+        action = next(a for a in page["actions"] if a["label"] == "Open results")
+        browser.act(action, page)
+        result = browser.observe(screenshot=False)
+        assert result["title"] == "Search results" and "Matching results" in result["text"]
+        assert not browser.fresh(page, action)
+        assert len(browser.owned_targets) == 2
+        passed.append("query popup becomes the observed page and invalidates parent actions")
         browser.call("Page.navigate", url="about:blank")
         assert not browser.fresh(page, field)
         passed.append("navigation invalidates the old document")

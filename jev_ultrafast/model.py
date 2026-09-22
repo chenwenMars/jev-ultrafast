@@ -81,13 +81,19 @@ def action_space(actions):
 def choose(state, goal, history):
     elements, targets, controls = action_space(state["actions"])
     labels = {
-        "CLICK": "Click an element, button, menu option, autocomplete suggestion, or calendar day.",
+        "CLICK": "Click to advance the goal: confirm an autocomplete suggestion, choose a date, "
+        "enable an unchecked requested filter, submit a search, or open the requested result. "
+        "Prefer this over DONE when matching results coexist with unchecked required filters.",
         "TYPE_TEXT": "Enter or replace text in an editable field. A small LLM will supply the value from the goal.",
         "SELECT": "Select an observed dropdown value.",
     }
     operations = {key: labels[key] for key in targets}
     operations.update({key: value["label"] for key, value in controls.items()})
-    operations.update(DONE="Every requirement is visibly satisfied.", BLOCKED="No supported operation can progress.")
+    operations.update(
+        DONE="All requested values and filters are applied and the actual results satisfy every requirement. "
+        "Do not finish with matching filters unchecked or results for other requested categories/locations.",
+        BLOCKED="No supported operation can progress.",
+    )
     questions = {
         "operation": {"type": "choice", "criteria": operations, "instructions": {"goal": goal, "rules": NEXT_ACTION}}
     }
@@ -107,6 +113,7 @@ def choose(state, goal, history):
     body = {
         "model": os.environ.get("TYPESAFE_MODEL", "jev-latest"),
         "state": {
+            "current_date": state.get("current_date"),
             "page": {k: state[k] for k in ("url", "title", "text")},
             "elements": elements,
             "recent_actions": [
@@ -151,6 +158,7 @@ def choose(state, goal, history):
 def field_context(goal, action, page, history):
     return {
         "goal": goal,
+        "current_date": page.get("current_date"),
         "field": {k: action.get(k) for k in ("label", "role", "value")},
         "page": {"title": page["title"], "text": page["text"][:6000]},
         "recent_actions": [{k: h.get(k) for k in ("action", "text")} for h in history[-6:]],

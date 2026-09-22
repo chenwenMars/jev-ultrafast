@@ -15,11 +15,14 @@ const translations = {
     "intro.helper": "+ text helper",
     "task.label": "Give it a task",
     "task.scenario": "Demo scenario",
+    "task.website": "Website address",
+    "task.websitePlaceholder": "https://example.com",
     "task.start": "Start demo",
     "scenario.flights": "Google Flights · real web",
     "scenario.12306": "铁路 12306 · real web",
     "scenario.travel": "Travel planner · fixture",
     "scenario.research": "Reading room · fixture",
+    "scenario.custom": "Custom website · real web",
     "controls.slowMotion": "Slow motion",
     "controls.targets": "Targets",
     "controls.choose": "Choose next",
@@ -76,6 +79,9 @@ const translations = {
     "error.requestFailed": "Request failed",
     "error.unknownScenario": "Unknown demo scenario",
     "error.goalLength": "Enter 1–2,000 characters",
+    "error.websiteAddress": "Enter a valid website address",
+    "error.httpWebsiteAddress": "Enter a valid HTTP(S) website address",
+    "error.websiteCredentials": "Website addresses cannot include credentials",
     "error.startFirst": "Start a demo first",
     "error.stepRunning": "A browser step is already running",
     "error.requestSize": "Invalid request size",
@@ -91,11 +97,14 @@ const translations = {
     "intro.helper": "+ 文本助手",
     "task.label": "输入任务",
     "task.scenario": "演示场景",
+    "task.website": "网站地址",
+    "task.websitePlaceholder": "https://example.com 或 example.com",
     "task.start": "开始演示",
     "scenario.flights": "Google Flights · 真实网页",
     "scenario.12306": "铁路 12306 · 真实网页",
     "scenario.travel": "旅行规划 · 本地样例",
     "scenario.research": "阅读室 · 本地样例",
+    "scenario.custom": "自定义网页 · 真实网页",
     "controls.slowMotion": "慢速演示",
     "controls.targets": "显示目标",
     "controls.choose": "选择下一步",
@@ -152,6 +161,9 @@ const translations = {
     "error.requestFailed": "请求失败",
     "error.unknownScenario": "未知的演示场景",
     "error.goalLength": "请输入 1–2,000 个字符",
+    "error.websiteAddress": "请输入有效的网站地址",
+    "error.httpWebsiteAddress": "请输入有效的 HTTP(S) 网站地址",
+    "error.websiteCredentials": "网站地址不能包含账号或密码",
     "error.startFirst": "请先启动演示",
     "error.stepRunning": "浏览器操作正在运行",
     "error.requestSize": "请求大小无效",
@@ -162,6 +174,9 @@ const errorKeys = {
   "Request failed": "error.requestFailed",
   "Unknown demo scenario": "error.unknownScenario",
   "Enter 1–2,000 characters": "error.goalLength",
+  "Enter a valid website address": "error.websiteAddress",
+  "Enter a valid HTTP(S) website address": "error.httpWebsiteAddress",
+  "Website addresses cannot include credentials": "error.websiteCredentials",
   "Start a demo first": "error.startFirst",
   "A browser step is already running": "error.stepRunning",
   "Invalid request size": "error.requestSize",
@@ -189,6 +204,9 @@ function applyTranslations() {
   });
   document.querySelectorAll("[data-i18n-alt]").forEach((element) => {
     element.alt = t(element.dataset.i18nAlt);
+  });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((element) => {
+    element.placeholder = t(element.dataset.i18nPlaceholder);
   });
   document.querySelectorAll(".language-option").forEach((button) => {
     button.setAttribute("aria-pressed", String(button.dataset.language === language));
@@ -228,12 +246,14 @@ const goals = {
     flights: `Find one-way flights from Zurich to London on ${departureDates.en}, for one adult in economy. Stop when matching flight options are visible. Do not select or book a flight.`,
     travel: "Find a Design stay in Lisbon with Free cancellation and open Casa Flora.",
     research: "Open the article about using finite choices to control browser agents.",
+    custom: "",
   },
   zh: {
     "12306": "查询明天从北京南到上海虹桥的高铁车次。显示符合条件的车次列表后停止，不要预订或支付。",
     flights: `查询从苏黎世到伦敦、于 ${departureDates.zh} 出发的单程航班，乘客为一名成人，经济舱。显示符合条件的航班选项后停止，不要选择或预订航班。`,
     travel: "在里斯本查找提供免费取消的设计酒店，并打开 Casa Flora。",
     research: "打开关于使用有限选项控制浏览器智能体的文章。",
+    custom: "",
   },
 };
 $("goal").value = goals[language][$("scenario").value];
@@ -262,6 +282,7 @@ function controls() {
   const live = state?.page && !["done", "blocked"].includes(state.status);
   $("start").disabled = busy;
   $("scenario").disabled = busy;
+  $("custom-url").disabled = busy;
   $("goal").disabled = busy;
   $("choose").disabled = busy || !live;
   $("execute").disabled = busy || !state?.decision || !live;
@@ -378,12 +399,20 @@ $("task-form").addEventListener("submit", (event) => {
   automatic = false;
   perform(
     () =>
-      call("reset", { scenario: $("scenario").value, goal: $("goal").value }),
+      call("reset", {
+        scenario: $("scenario").value,
+        custom_url: $("custom-url").value,
+        goal: $("goal").value,
+      }),
     "status.opening",
   );
 });
 $("scenario").addEventListener("change", () => {
   $("goal").value = goals[language][$("scenario").value];
+  const isCustom = $("scenario").value === "custom";
+  $("custom-url-field").hidden = !isCustom;
+  $("custom-url").required = isCustom;
+  if (isCustom) $("custom-url").focus();
 });
 $("choose").addEventListener("click", () =>
   perform(() => call("predict"), "status.comparing"),
